@@ -15,37 +15,51 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <lunchbox/log.h>
 #include <pthread.h>
 
 #include "log.h"
+#include <lunchbox/log.h>
 
 #include "clock.h"
 #include "perThread.h"
 #include "scopedMutex.h"
 #include "spinLock.h"
 #include "thread.h"
+#include <lunchbox/log.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <lunchbox/log.h>
 
 #ifdef _MSC_VER
-#include <process.h>
 #include <io.h>
+#include <lunchbox/log.h>
+#include <process.h>
 #define atoll _atoi64
 #define snprintf _snprintf
 #define getpid _getpid
 #define isatty _isatty
 #define fileno _fileno
 #pragma warning(push)
-#pragma warning(disable: 4996)
+#pragma warning(disable : 4996)
 #else
+#include <lunchbox/log.h>
 #include <unistd.h>
 #endif
 
 #ifdef _WIN32
+#include <lunchbox/log.h>
+
+#endif
+
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <limits.h>
+#include <unistd.h>
 #endif
 
 namespace lunchbox
@@ -54,7 +68,7 @@ static unsigned getLogTopics();
 const size_t LENGTH_PID = 5;
 const size_t LENGTH_THREAD = 8;
 const size_t LENGTH_FILE = 29;
-const size_t LENGTH_TIME = 6;
+const size_t LENGTH_TIME = 23;
 
 namespace
 {
@@ -63,17 +77,14 @@ struct LogTable
     LogLevel level;
     std::string name;
 };
-#define LOG_TABLE_ENTRY(name)          \
-    {                                  \
-        LOG_##name, std::string(#name) \
-    }
+#define LOG_TABLE_ENTRY(name) {LOG_##name, std::string(#name)}
 
 struct LogGlobals
 {
     // clang-format off
     LogGlobals()
         : levels{LOG_TABLE_ENTRY(ERROR),
-                 {LOG_ERROR, "WARN"},
+                 LOG_TABLE_ENTRY(WARN),             
                  LOG_TABLE_ENTRY(INFO),
                  LOG_TABLE_ENTRY(DEBUG),
                  LOG_TABLE_ENTRY(VERB),
@@ -104,12 +115,14 @@ private:
     {
         // Check environment variable first
         const char* noColor = std::getenv("NO_COLOR");
-        if (noColor && strlen(noColor) > 0) {
+        if (noColor && strlen(noColor) > 0)
+        {
             return false;
         }
 
         const char* forceColor = std::getenv("LB_LOG_COLOR");
-        if (forceColor) {
+        if (forceColor)
+        {
             return strcmp(forceColor, "1") == 0 ||
                    strcmp(forceColor, "true") == 0 ||
                    strcmp(forceColor, "yes") == 0;
@@ -118,25 +131,30 @@ private:
 #ifdef _WIN32
         // Try to enable ANSI escape sequences on Windows 10+
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (hOut == INVALID_HANDLE_VALUE) return false;
+        if (hOut == INVALID_HANDLE_VALUE)
+            return false;
 
         DWORD dwMode = 0;
-        if (!GetConsoleMode(hOut, &dwMode)) return false;
+        if (!GetConsoleMode(hOut, &dwMode))
+            return false;
 
         dwMode |= 0x0004; // ENABLE_VIRTUAL_TERMINAL_PROCESSING
-        if (SetConsoleMode(hOut, dwMode)) {
+        if (SetConsoleMode(hOut, dwMode))
+        {
             return isatty(fileno(stdout));
         }
         return false;
 #else
         // Check if we're outputting to a terminal
-        if (!isatty(fileno(stdout))) {
+        if (!isatty(fileno(stdout)))
+        {
             return false;
         }
 
         // Check TERM environment variable
         const char* term = std::getenv("TERM");
-        if (!term || strcmp(term, "dumb") == 0) {
+        if (!term || strcmp(term, "dumb") == 0)
+        {
             return false;
         }
 
@@ -153,23 +171,25 @@ LogGlobals& globals()
 
 std::string getColorForLevel(LogLevel level, bool enabled)
 {
-    if (!enabled || !globals().colorSupported) {
+    if (!enabled || !globals().colorSupported)
+    {
         return "";
     }
 
-    switch (level) {
-        case LOG_ERROR:
-            return LogColor::ERROR_COLOR;
-        case LOG_WARN:
-            return LogColor::DEBUG_COLOR;
-        case LOG_INFO:
-            return LogColor::INFO_COLOR;
-        case LOG_DEBUG:
-            return LogColor::DEBUG_COLOR;
-        case LOG_VERB:
-            return LogColor::VERB_COLOR;
-        default:
-            return "";
+    switch (level)
+    {
+    case LOG_ERROR:
+        return LogColor::ERROR_COLOR;
+    case LOG_WARN:
+        return LogColor::WARN_COLOR;
+    case LOG_INFO:
+        return LogColor::INFO_COLOR;
+    case LOG_DEBUG:
+        return LogColor::DEBUG_COLOR;
+    case LOG_VERB:
+        return LogColor::VERB_COLOR;
+    default:
+        return "";
     }
 }
 
@@ -177,7 +197,7 @@ std::string getResetColor(bool enabled)
 {
     return (enabled && globals().colorSupported) ? LogColor::RESET : "";
 }
-}
+} // namespace
 
 namespace detail
 {
@@ -194,7 +214,8 @@ public:
         , _colorEnabled(true)
         , _currentLogLevel(LOG_INFO)
     {
-        _file[0] = 0;
+        // _file[0] = 0;
+        _file = "";
         setThreadName("Unknown");
     }
 
@@ -231,15 +252,105 @@ public:
     {
         LBASSERT(f);
         std::string file(f);
-        const size_t length = file.length();
+        // const size_t length = file.length();
 
-        if (length > LENGTH_FILE)
-            file = file.substr(length - LENGTH_FILE, length);
+        // if (length > LENGTH_FILE)
+        //     file = file.substr(length - LENGTH_FILE, length);
 
-        snprintf(_file, LENGTH_FILE + 6, "%29s:%-4d", file.c_str(), line);
+        // snprintf(_file, LENGTH_FILE + 6, "%29s:%-4d", file.c_str(), line);
+
+        _file = file + ":" + std::to_string(line);
+        // return the last part of the file with at most 2 levels of directory
+        // example: /a/b/c/d.cpp:123 -> b/c/d.cpp, c/d.cpp:123 -> c/d.cpp
+        std::string leftPart = _file;
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (leftPart.find_last_of('/') == std::string::npos)
+            {
+                break;
+            }
+            leftPart = leftPart.substr(0, leftPart.find_last_of('/'));
+        }
+
+        _file = _file.substr(leftPart.find_last_of('/') + 1);
     }
 
 protected:
+    // get the timestamp string with format YYYYMMDD_HH:MM:SS.mmm
+    std::string GetTimestampString()
+    {
+        using namespace std::chrono;
+
+        // Current time
+        auto now = system_clock::now();
+
+        // Round down to whole seconds
+        auto secs = time_point_cast<seconds>(now);
+        auto in_time_t = system_clock::to_time_t(secs);
+
+        // Milliseconds part of this second
+        auto ms =
+            duration_cast<milliseconds>(now.time_since_epoch()).count() % 1000;
+
+        // Calendar time
+        std::tm tm{};
+#if defined(_WIN32)
+        localtime_s(&tm, &in_time_t); // Windows
+#else
+        localtime_r(&in_time_t, &tm); // Linux/Unix
+#endif
+
+        // Format string
+        char buffer[32];
+        std::strftime(buffer, sizeof(buffer), "%Y%m%d_%H:%M:%S", &tm);
+
+        std::ostringstream oss;
+        oss << buffer << "." << std::setw(3) << std::setfill('0') << ms;
+
+        return oss.str();
+    }
+
+    std::string GetComputerName()
+    {
+        char buffer[HOST_NAME_MAX];
+#if defined(_WIN32)
+        DWORD size = sizeof(buffer);
+        if (GetComputerNameA(buffer, &size))
+        {
+            return std::string(buffer, size);
+        }
+#else
+        if (gethostname(buffer, sizeof(buffer)) == 0)
+        {
+            return std::string(buffer);
+        }
+#endif
+        return "unknown";
+    }
+
+    std::string LoglevelToString(LogLevel level)
+    {
+        switch (level)
+        {
+        case LOG_ERROR:
+            return "error";
+        case LOG_WARN:
+            return "warn";
+        case LOG_INFO:
+            return "info";
+        case LOG_DEBUG:
+            return "debug";
+        case LOG_VERB:
+            return "verb";
+        case LOG_ALL:
+            return "all";
+        default:
+            return "unknown";
+        }
+        return "unknown";
+    }
+
     int_type overflow(Log::int_type c) override
     {
         if (c == EOF)
@@ -248,23 +359,54 @@ protected:
         if (_newLine)
         {
             // Add color prefix at the beginning of new lines
-            std::string colorPrefix = getColorForLevel(_currentLogLevel, _colorEnabled);
-            if (!colorPrefix.empty()) {
-                _stringStream << colorPrefix;
-            }
+            std::string colorPrefix =
+                getColorForLevel(_currentLogLevel, _colorEnabled);
+            // if (!colorPrefix.empty())
+            // {
+            //     _stringStream << colorPrefix;
+            // }
 
             if (!_noHeader)
             {
                 if (lunchbox::Log::level > LOG_INFO)
-                    _stringStream << std::right << std::setw(LENGTH_PID)
-                                  << getpid() << "." << std::left
-                                  << std::setw(LENGTH_THREAD) << _thread << " "
-                                  << _file << " " << std::right
-                                  << std::setw(LENGTH_TIME)
-                                  << globals().clock->getTime64() << " ";
+                {
+                    // _stringStream << std::right << std::setw(LENGTH_PID)
+                    //               << getpid() << "." << std::left
+                    //               << std::setw(LENGTH_THREAD) << _thread << "
+                    //               "
+                    //               << _file << " " << std::right
+                    //               << std::setw(LENGTH_TIME)
+                    //               //<< globals().clock->getTime64() << " ";
+                    //               << GetTimestampString() << " ";
+
+                    // @Johnny change the format to replace fixed length fields
+                    // with []
+                    _stringStream << "[" << GetComputerName() << "." << getpid()
+                                  << "." << _thread << "]";
+                    if (!colorPrefix.empty())
+                    {
+                        _stringStream << colorPrefix;
+                    }
+                    _stringStream << "[" << LoglevelToString(_currentLogLevel)
+                                  << "]";
+                    if (!colorPrefix.empty())
+                    {
+                        _stringStream << LogColor::RESET;
+                    }
+
+                    _stringStream << "[" << _file << "]"
+                                  << "[" << GetTimestampString() << "] ";
+                }
+
                 else
-                    _stringStream << std::right << std::setw(LENGTH_TIME)
-                                  << globals().clock->getTime64() << " ";
+                {
+                    // _stringStream << std::right
+                    //               << std::setw(LENGTH_TIME)
+                    //               //<< globals().clock->getTime64() << " ";
+                    //               << GetTimestampString() << " ";
+
+                    _stringStream << "[" << GetTimestampString() << "] ";
+                }
             }
 
             for (int i = 0; i < _indent; ++i)
@@ -284,12 +426,16 @@ protected:
 
             // Add color reset at the end if we have colors enabled
             std::string colorReset = getResetColor(_colorEnabled);
-            if (!colorReset.empty() && !string.empty()) {
+            if (!colorReset.empty() && !string.empty())
+            {
                 // Check if the string ends with a newline
-                if (string.back() == '\n') {
+                if (string.back() == '\n')
+                {
                     // Insert reset before the newline
                     string.insert(string.length() - 1, colorReset);
-                } else {
+                }
+                else
+                {
                     // Append reset at the end
                     string += colorReset;
                 }
@@ -314,7 +460,8 @@ private:
     std::string _thread;
 
     /** The current file logging. */
-    char _file[35];
+    // char _file[35];
+    std::string _file;
 
     /** The current indentation level. */
     int _indent;
@@ -340,7 +487,7 @@ private:
     /** The wrapped ostream. */
     std::ostream& _stream;
 };
-}
+} // namespace detail
 
 int Log::level = Log::getLogLevel(getenv("LB_LOG_LEVEL"));
 unsigned Log::topics = getLogTopics();
@@ -648,4 +795,4 @@ std::ostream& enableHeader(std::ostream& os)
 #pragma warning(pop)
 #endif
 
-}
+} // namespace lunchbox

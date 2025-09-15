@@ -40,11 +40,11 @@ namespace lunchbox
 /** The logging levels. @version 1.0 */
 enum LogLevel
 {
-    LOG_ERROR = 1,        //!< Output critical errors and warnings
-    LOG_WARN , //!< @deprecated
-    LOG_INFO,             //!< Output informational messages
-    LOG_DEBUG,            //!< Output debugging information
-    LOG_VERB,             //!< Be noisy
+    LOG_ERROR = 1, //!< Output critical errors and warnings
+    LOG_WARN,      //!< Output warning messages
+    LOG_INFO,      //!< Output informational messages
+    LOG_DEBUG,     //!< Output debugging information
+    LOG_VERB,      //!< Be noisy
     LOG_ALL = 6
 };
 
@@ -60,21 +60,21 @@ enum LogTopic
 /** Color support for logging. @version 1.0 */
 namespace LogColor
 {
-    const std::string RESET = "\033[0m";
-    const std::string RED = "\033[31m";
-    const std::string GREEN = "\033[32m";
-    const std::string YELLOW = "\033[33m";
-    const std::string BLUE = "\033[34m";
-    const std::string CYAN = "\033[36m";
-    const std::string BOLD = "\033[1m";
-    
-    // Log level specific colors
-    const std::string ERROR_COLOR = "\033[1;31m";   // Bold Red
-    const std::string WARN_COLOR = "\033[1;33m";    // Bold Yellow
-    const std::string INFO_COLOR = "\033[32m";      // Green
-    const std::string DEBUG_COLOR = "\033[36m";     // Cyan
-    const std::string VERB_COLOR = "\033[35m";      // Magenta
-}
+const std::string RESET = "\033[0m";
+const std::string RED = "\033[31m";
+const std::string GREEN = "\033[32m";
+const std::string YELLOW = "\033[33m";
+const std::string BLUE = "\033[34m";
+const std::string CYAN = "\033[36m";
+const std::string BOLD = "\033[1m";
+
+// Log level specific colors
+const std::string ERROR_COLOR = "\033[1;31m"; // Bold Red
+const std::string WARN_COLOR = "\033[1;33m";  // Bold Yellow
+const std::string INFO_COLOR = "\033[32m";    // Green
+const std::string DEBUG_COLOR = "\033[36m";   // Cyan
+const std::string VERB_COLOR = "\033[35m";    // Magenta
+} // namespace LogColor
 
 namespace detail
 {
@@ -139,7 +139,8 @@ public:
     static LUNCHBOX_API Log& instance(const char* file, const int line);
 
     /** The per-thread logger with log level for coloring. */
-    static LUNCHBOX_API Log& instance(const char* file, const int line, LogLevel logLevel);
+    static LUNCHBOX_API Log& instance(const char* file, const int line,
+                                      LogLevel logLevel);
 
     /** Exit the log instance for the current thread. */
     static LUNCHBOX_API void exit();
@@ -229,19 +230,21 @@ inline std::ostream& stopBlock(std::ostream& os)
 {
     return os << enableHeader << enableFlush << exdent;
 }
-}
+} // namespace lunchbox
 
 /** Output an error message to the per-thread Log stream. @version 1.0 */
 #define LBERROR                                      \
     (lunchbox::Log::level >= lunchbox::LOG_ERROR) && \
         lunchbox::Log::instance(__FILE__, __LINE__, lunchbox::LOG_ERROR)
-/** @deprecated */
-#define LBWARN LBERROR
+/** @Johnny change the LBWARN to use the WARN level */
+#define LBWARN                                      \
+    (lunchbox::Log::level >= lunchbox::LOG_WARN) && \
+        lunchbox::Log::instance(__FILE__, __LINE__, lunchbox::LOG_WARN)
 /** Output an informational message to the per-thread Log. @version 1.0 */
 #define LBINFO                                      \
     (lunchbox::Log::level >= lunchbox::LOG_INFO) && \
         lunchbox::Log::instance(__FILE__, __LINE__, lunchbox::LOG_INFO)
-/** Output a warning message to the per-thread Log stream. @version 1.0 */
+/** Output a debug message to the per-thread Log stream. @version 1.0 */
 #define LBDEBUG                                      \
     (lunchbox::Log::level >= lunchbox::LOG_DEBUG) && \
         lunchbox::Log::instance(__FILE__, __LINE__, lunchbox::LOG_DEBUG)
